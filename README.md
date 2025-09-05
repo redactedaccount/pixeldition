@@ -29,3 +29,13 @@ Invert red, *then* swap blue and green:
 ```sh
 poetry run pixeldition pixeldition/test_images/test1.jpg -ci r -cs b g
 ```
+
+# Using the Makefile
+
+Place any images you want to batch-convert into an `images/` directory, set the
+transformation with the 'trans' variable.  For example, to invert the colour red,
+invoke like this:
+
+```sh
+make -e trans='-ci r' -j batch
+```
