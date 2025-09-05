@@ -83,7 +83,7 @@ class PixelditionCLI:
         """Get usage examples"""
         examples_string = """EXAMPLES:
 # Chain multiple transformations
-pixeldition image.jpg --swap r b --channel-invert g --drift 50
+pixeldition image.jpg --swap r b --channel-invert g
 
 # Save without displaying
 pixeldition image.jpg --channel-swap g b -o result.jpg --no-display
@@ -100,8 +100,6 @@ pixeldition --list-transformers
 
         return examples_string
 
-
-
     def parse_arguments(self, args: List[str]) -> Tuple[argparse.Namespace, List[Tuple[str, dict]]]:
         """Parse CLI arguments and build transformation pipeline"""
 
@@ -116,18 +114,90 @@ pixeldition --list-transformers
         if not parsed_args.input:
             parser.error("Input image is required")
 
-        # Build pipeline from arguments
+        # Build pipeline from arguments in CLI order by parsing raw args
         transforms = []
 
-        # Check each transformer to see if its arguments were provided
-        print(self.registry.list_all().items())
+        # Create mappings for transformers and their flags
+        flag_to_transformer = {}
+        transformer_instances = {}
+
         for name, transformer_class in self.registry.list_all().items():
-
             transformer = transformer_class()
-            params = transformer.parse_cli_args(parsed_args)
+            transformer_instances[name] = transformer
+            cli_args = transformer.get_cli_args()
 
-            if params:  # If this transformer has arguments set
-                transforms.append((name, params))
+            for arg_config in cli_args:
+                flags = arg_config.get('flags', [])
+                for flag in flags:
+                    flag_to_transformer[flag] = name
+
+        # Process raw arguments in order to preserve sequence and handle multiple instances
+        raw_args = args.copy()
+
+        # Remove the input file from consideration
+        if raw_args and not raw_args[0].startswith('-'):
+            raw_args.pop(0)
+
+        i = 0
+        while i < len(raw_args):
+            arg = raw_args[i]
+
+            if arg in flag_to_transformer:
+                transformer_name = flag_to_transformer[arg]
+                transformer = transformer_instances[transformer_name]
+                temp_args = argparse.Namespace()
+                transformer_cli_args = transformer.get_cli_args()
+                current_arg_config = None
+
+                for arg_config in transformer_cli_args:
+                    if arg in arg_config.get('flags', []):
+                        current_arg_config = arg_config
+                        break
+
+                if current_arg_config:
+                    nargs = current_arg_config.get('nargs', 0)
+                    attr_name = arg.lstrip('-').replace('-', '_')
+
+                    if nargs == '+':
+                        values = []
+                        j = i + 1
+                        while j < len(raw_args) and not raw_args[j].startswith('-'):
+                            values.append(raw_args[j])
+                            j += 1
+                        setattr(temp_args, attr_name, values)
+                        i = j - 1
+
+                    elif nargs == 2:
+                        if i + 2 < len(raw_args):
+                            values = [raw_args[i + 1], raw_args[i + 2]]
+                            setattr(temp_args, attr_name, values)
+                            i += 2
+                        else:
+                            i += 1
+                            continue
+
+                    elif isinstance(nargs, int) and nargs == 1:
+                        # Single argument
+                        if i + 1 < len(raw_args):
+                            setattr(temp_args, attr_name, raw_args[i + 1])
+                            i += 1
+                        else:
+                            i += 1
+                            continue
+                    else:
+                        # Flag without arguments
+                        setattr(temp_args, attr_name, True)
+
+                for attr_name, attr_value in vars(parsed_args).items():
+                    if not hasattr(temp_args, attr_name):
+                        setattr(temp_args, attr_name, attr_value)
+
+                params = transformer.parse_cli_args(temp_args)
+
+                if params:
+                    transforms.append((transformer_name, params))
+
+            i += 1
 
         return parsed_args, transforms
 
@@ -160,11 +230,6 @@ pixeldition --list-transformers
         # Parse arguments
         try:
             parsed_args, transforms = self.parse_arguments(args)
-            print('parsed_args')
-            print(parsed_args)
-            print(args)
-
-
         except SystemExit:
             return
 
@@ -174,7 +239,6 @@ pixeldition --list-transformers
             print(f"Error: Input file '{input_path}' does not exist")
             sys.exit(1)
 
-        # Load image
         try:
             image = Image.open(input_path)
             print(f"Loaded image: {input_path} ({image.size[0]}x{image.size[1]}, {image.mode})")
