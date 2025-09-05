@@ -1,0 +1,22 @@
+[project]
+name = "pixeldition"
+version = "0.1.0"
+description = "Utility for manipulating raster images with pipelines in mind. Uses conditional per-pixel logic and more."
+authors = [
+    {name = "Mantisek",email = "ethan.mantisek@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow (>=11.3.0,<12.0.0)",
+    "importlib (>=1.0.4,<2.0.0)",
+    "pathlib (>=1.0.1,<2.0.0)"
+]
+packages = [{include = "pixeldition"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+pixeldition = "pixeldition.main:main"
